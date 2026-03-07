@@ -35,6 +35,8 @@ import {
   getInvoiceSummary,
   updateInvoiceTransactions,
   updateInvoiceStatus,
+  getAPIUsage,
+  incrementAPIUsage,
 } from "../controllers/SiswaController.js";
 import { uploadFile } from "../controllers/UploadController.js";
 
@@ -80,6 +82,8 @@ router.post("/upload", uploadFile);
 router.get("/listinvoice", VerifyToken, list_invoice);
 router.get("/invoice-detail/:id", VerifyToken, invoiceDetail);
 router.get("/invoice-summary", VerifyToken, getInvoiceSummary);
+router.get("/api-usage", VerifyToken, getAPIUsage);
+router.post("/apiusage/:userId", VerifyToken, incrementAPIUsage);
 router.post("/save-invoice", VerifyToken, updateInvoiceTransactions);
 router.post("/update-invoice-status", VerifyToken, updateInvoiceStatus);
 

@@ -102,7 +102,7 @@ export const LoginUser = async (req, res) => {
 
       res.json({
         success: true,
-        user: { name: name, email: email, role: role, status: status },
+        user: { id: userId, name: name, email: email, role: role, status: status },
       });
     }
     // return res.send("ada usersnya");

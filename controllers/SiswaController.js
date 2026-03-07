@@ -16,6 +16,9 @@ import BoxModel from "../models/BoxModel.js";
 import selectedBox from "../models/selectedBox.js";
 import invoice from "../models/invoiceModel.js";
 import transaction from "../models/transactionModel.js";
+import APIUsageGroup from "../models/api_ussage_group.js";
+import APIUsageIndividual from "../models/api_ussage_individual.js";
+import DB from "../config/Database.js";
 
 // >>> CREATE NEW SISWA
 export const createSiswa = async (req, res) => {
@@ -1125,10 +1128,105 @@ export const updateInvoiceStatus = async (req, res) => {
     }
 
     await existingInvoice.update({ status });
-
     res.status(200).json({ message: "Invoice status updated successfully" });
   } catch (error) {
     console.error("Error updating invoice status:", error);
     res.status(500).json({ message: "Failed to update invoice status", error: error.message });
+  }
+};
+
+export const getAPIUsage = async (req, res) => {
+  try {
+    const userId = req.alldata.userId;
+    // Find or create individual usage record
+    let [individualUsage, created] = await APIUsageIndividual.findOrCreate({
+      where: { id_user: userId },
+      defaults: {
+        id_user: userId,
+        api_usage: 0,
+        id_api_group: null
+      },
+      include: [{ model: APIUsageGroup }]
+    });
+
+    // If it was just created, we need to re-fetch to get the include correctly if needed
+    if (created) {
+      individualUsage = await APIUsageIndividual.findOne({
+        where: { id_user: userId },
+        include: [{ model: APIUsageGroup }]
+      });
+    }
+
+    if (!individualUsage || !individualUsage.api_usage_group) {
+      return res.status(200).json({
+        hasGroup: false,
+        message: "You don't belong to any group yet"
+      });
+    }
+
+    const group = individualUsage.api_usage_group;
+    res.status(200).json({
+      hasGroup: true,
+      groupName: group.group_name,
+      usage: group.api_usage_total,
+      limit: group.api_limit
+    });
+  } catch (error) {
+    console.error("Error getAPIUsage:", error);
+    res.status(500).json({ message: "Failed to get API usage", error: error.message });
+  }
+};
+
+export const incrementAPIUsage = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    console.log("[API Usage] Incrementing for userId:", userId);
+
+    // 1. Find the individual usage record with its group
+    const individualUsage = await APIUsageIndividual.findOne({
+      where: { id_user: userId },
+      include: [{ model: APIUsageGroup }]
+    });
+
+    if (!individualUsage) {
+      return res.status(404).json({ message: "API Usage record not found for this user" });
+    }
+
+    const group = individualUsage.api_usage_group;
+    if (!group) {
+      return res.status(403).json({ message: "You don't belong to any API group yet" });
+    }
+
+    // 🔥 PRIORITIZED LIMIT CHECK
+    if (group.api_usage_total >= group.api_limit) {
+      console.warn(`[API Usage] Limit reached for group: ${group.group_name} (${group.api_usage_total}/${group.api_limit})`);
+      return res.status(403).json({
+        message: "API usage limit reached for your group. Processing aborted.",
+        usage: group.api_usage_total,
+        limit: group.api_limit
+      });
+    }
+
+    const groupId = group.id;
+
+    // 2. Perform increments
+    await DB.transaction(async (t) => {
+      // Increment Individual
+      await individualUsage.increment('api_usage', { by: 1, transaction: t });
+
+      // Increment Group if exists
+      if (groupId) {
+        await APIUsageGroup.increment('api_usage_total', {
+          by: 1,
+          where: { id: groupId },
+          transaction: t
+        });
+      }
+    });
+
+    return res.status(200).json({ message: "Usage incremented successfully" });
+  } catch (error) {
+    console.error("Error incrementing API usage:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
