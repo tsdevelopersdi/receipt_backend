@@ -35,7 +35,7 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",").map(o => o.trim()) : "*",
+    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(/[,\n]/).map(o => o.trim()).filter(Boolean) : "*",
     methods: ["GET", "POST"]
   }
 });
@@ -64,7 +64,7 @@ app.use(
   cors({
     credentials: true,
     origin: process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.split(",").map(o => o.trim())
+      ? process.env.CORS_ORIGIN.split(/[,\n]/).map(o => o.trim()).filter(Boolean)
       : true,
   })
 );

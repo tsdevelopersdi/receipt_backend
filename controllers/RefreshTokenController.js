@@ -35,10 +35,11 @@ export const refreshToken = async (req, res) => {
         // Set as httpOnly cookie — frontend does NOT need to handle this value
         res.cookie("accessToken", newAccessToken, {
           httpOnly: true,
-          maxAge: 30 * 1000, // 30s for testing
-          secure: false,     // MUST be false for HTTP testing
+          maxAge: 600 * 1000, // 10 minutes, matches AuthController
+          secure: true,
           sameSite: "lax",
-          path: "/",         // Crucial: define path so it's available globally
+          domain: "estimaclaim.solusidaya.id",
+          path: "/",
         });
 
         return res.json({ success: true });
