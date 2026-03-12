@@ -1095,6 +1095,7 @@ export const updateInvoiceTransactions = async (req, res) => {
 
         newTransactions.push({
           invoice_id: id,
+          tanggal: t.tanggal || null,
           merchant: t.merchant || "",
           jumlah: jumlah,
           // Optional: id_user: req.alldata?.id

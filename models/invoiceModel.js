@@ -26,6 +26,10 @@ const invoice = DB.define(
             type: DataTypes.STRING,
             defaultValue: null
         },
+        keterangan: {
+            type: DataTypes.STRING,
+            defaultValue: null
+        },
     },
     {
         freezeTableName: true,
