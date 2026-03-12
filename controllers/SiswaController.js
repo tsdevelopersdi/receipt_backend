@@ -19,6 +19,10 @@ import transaction from "../models/transactionModel.js";
 import APIUsageGroup from "../models/api_ussage_group.js";
 import APIUsageIndividual from "../models/api_ussage_individual.js";
 import DB from "../config/Database.js";
+import {
+  sendManagerNotification,
+  sendAdminStatusNotification
+} from "../utils/EmailService.js";
 
 // >>> CREATE NEW SISWA
 export const createSiswa = async (req, res) => {
@@ -1117,10 +1121,14 @@ export const updateInvoiceTransactions = async (req, res) => {
 export const updateInvoiceStatus = async (req, res) => {
   const { id, status } = req.body;
   try {
-    const existingInvoice = await invoice.findByPk(id);
+    const existingInvoice = await invoice.findByPk(id, {
+      include: [Users]
+    });
     if (!existingInvoice) {
       return res.status(404).json({ message: "Invoice not found" });
     }
+
+    const currentStatus = existingInvoice.status;
 
     // 🔥 SECURITY FIX: Status validation
     const allowedStatuses = ["on_review", "on_forward", "rejected", "accepted", "closed"];
@@ -1129,6 +1137,43 @@ export const updateInvoiceStatus = async (req, res) => {
     }
 
     await existingInvoice.update({ status });
+
+    // --- SEND EMAIL NOTIFICATIONS ---
+    
+    // 1. Admin verifies and forwards to Manager
+    if (currentStatus === "on_review" && status === "on_forward") {
+      const envManagerEmail = process.env.EMAIL_TO_MANAGER;
+      
+      if (envManagerEmail) {
+        sendManagerNotification(
+          envManagerEmail,
+          existingInvoice.user?.name || "User",
+          existingInvoice.id,
+          existingInvoice.total_harga
+        );
+      } else {
+        // Fallback: Find a manager in DB if env is not set
+        const manager = await Users.findOne({ where: { role: "manager" } });
+        if (manager) {
+          sendManagerNotification(
+            manager.email,
+            existingInvoice.user?.name || "User",
+            existingInvoice.id,
+            existingInvoice.total_harga
+          );
+        }
+      }
+    }
+
+    // 2. Manager approves or rejects
+    if (currentStatus === "on_forward" && (status === "accepted" || status === "rejected")) {
+      sendAdminStatusNotification(
+        existingInvoice.user?.name || "User",
+        existingInvoice.id,
+        status
+      );
+    }
+
     res.status(200).json({ message: "Invoice status updated successfully" });
   } catch (error) {
     console.error("Error updating invoice status:", error);
