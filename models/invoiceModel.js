@@ -30,6 +30,30 @@ const invoice = DB.define(
             type: DataTypes.STRING,
             defaultValue: null
         },
+        opsi: {
+            type: DataTypes.STRING,
+            defaultValue: null
+        },
+        dept: {
+            type: DataTypes.STRING,
+            defaultValue: null
+        },
+        acc_direksi: {
+            type: DataTypes.STRING,
+            defaultValue: null
+        },
+        acc_supervisor: {
+            type: DataTypes.STRING,
+            defaultValue: null
+        },
+        acc_finance: {
+            type: DataTypes.STRING,
+            defaultValue: null
+        },
+        acc_kasir: {
+            type: DataTypes.STRING,
+            defaultValue: null
+        },
     },
     {
         freezeTableName: true,

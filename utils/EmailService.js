@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import Users from "../models/UserModel.js";
 
 dotenv.config();
 
@@ -184,6 +185,85 @@ export const sendAdminStatusNotification = async (uploaderName, invoiceId, statu
         return info;
     } catch (error) {
         console.error("[❌][📧] FAILED to send Admin status notification:", error.message);
+        return null;
+    }
+};
+
+/**
+ * Send an email notification to the next person in the approval sequence
+ * @param {string} toRole - The role of the next approver
+ * @param {string} dept - The department (for Supervisor role)
+ * @param {string} uploaderName - Original uploader name
+ * @param {string} invoiceId - Invoice ID
+ * @param {number} total - Grand total
+ */
+export const sendNextApproverNotification = async (toRole, dept, uploaderName, invoiceId, total) => {
+    try {
+        // Find recipient email based on role and dept
+        let recipientEmail = "";
+        
+        if (toRole === "manager") {
+            recipientEmail = process.env.EMAIL_TO_MANAGER;
+        } else if (toRole === "admin") {
+            recipientEmail = process.env.EMAIL_TO_ADMIN;
+        }
+        
+        // If not special env var, look up in DB
+        if (!recipientEmail) {
+            const query = { role: toRole };
+            if (toRole === "supervisor" && dept) {
+                query.department = dept;
+            }
+            const user = await Users.findOne({ where: query });
+            if (user) {
+                recipientEmail = user.email;
+            }
+        }
+
+        if (!recipientEmail) {
+            console.log(`[📧] No recipient found for role: ${toRole}${dept ? ' in dept: ' + dept : ''}`);
+            return null;
+        }
+
+        console.log(`[📧] Sending notification to ${toRole} at:`, recipientEmail);
+        const info = await transporter.sendMail({
+            from: process.env.EMAIL_FROM,
+            to: recipientEmail,
+            subject: `Invoice #${invoiceId} Approval Required`,
+            text: `Notification:\n\nAn invoice from ${uploaderName} requires your review and approval.\n\nDetails:\n- Role: ${toRole}\n- Invoice ID: ${invoiceId}\n- Total amount: Rp ${total.toLocaleString()}\n\nPlease log in to the finance dashboard to review this submission.`,
+            html: `
+        <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+          <h2 style="color: #007bff;">Approval Required</h2>
+          <p>An invoice is awaiting your review as <strong>${toRole.toUpperCase()}</strong>.</p>
+          
+          <div style="background: #f4f4f4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #007bff;">
+            <h3 style="margin-top: 0;">Invoice Details:</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 5px 0; font-weight: bold; width: 40%;">Uploader Name:</td>
+                <td>${uploaderName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-weight: bold;">Invoice ID:</td>
+                <td>#${invoiceId}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-weight: bold;">Grand Total:</td>
+                <td style="color: #007bff; font-weight: bold;">Rp ${total.toLocaleString()}</td>
+              </tr>
+            </table>
+          </div>
+          
+          <p>Please log in to <strong>Cakra Finance Dashboard</strong> to approve or reject this submission.</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="font-size: 0.8em; color: #777;">This is an automated system notification.</p>
+        </div>
+      `,
+        });
+        console.log(`[✅][📧] Notification to ${toRole} sent successfully!`);
+        return info;
+    } catch (error) {
+        console.error(`[❌][📧] FAILED to send notification to ${toRole}:`, error.message);
         return null;
     }
 };

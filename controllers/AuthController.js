@@ -45,15 +45,16 @@ export const LoginUser = async (req, res) => {
       const email = user[0].email;
       const role = user[0].role;
       const status = user[0].status;
+      const department = user[0].department;
       const accessToken = jwt.sign(
-        { userId, name, email, role, status },
+        { userId, name, email, role, status, department },
         process.env.ACCESS_TOKEN_SECRET,
         {
           expiresIn: "30s",
         },
       );
       const refreshToken = jwt.sign(
-        { userId, name, email, role, status },
+        { userId, name, email, role, status, department },
         process.env.REFRESH_TOKEN_SECRET,
         {
           // expiresIn: "1d",
@@ -72,7 +73,7 @@ export const LoginUser = async (req, res) => {
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         maxAge: 600 * 1000,
-        secure: true,
+        secure: true, // Changed to false for HTTP support
         sameSite: "lax",
         domain: "estimaclaim.solusidaya.id",
         path: "/"
@@ -81,7 +82,7 @@ export const LoginUser = async (req, res) => {
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         maxAge: 7 * 24 * 60 * 60 * 1000,
-        secure: true,
+        secure: true, // Changed to false for HTTP support
         sameSite: "lax",
         domain: "estimaclaim.solusidaya.id",
         path: "/"
@@ -89,7 +90,7 @@ export const LoginUser = async (req, res) => {
 
       res.json({
         success: true,
-        user: { id: userId, name: name, email: email, role: role, status: status },
+        user: { id: userId, name: name, email: email, role: role, status: status, department: department },
       });
     }
     // return res.send("ada usersnya");

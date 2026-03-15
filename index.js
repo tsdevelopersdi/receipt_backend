@@ -112,7 +112,7 @@ try {
   await DB.authenticate();
   console.log("Database Connected !");
   // await Presensi.sync();
-  await Users.sync();
+  await Users.sync({ alter: true });
   // await Siswa.sync();
   await ProjectModel.sync();
   await sld_draft_name.sync();

@@ -21,7 +21,8 @@ import APIUsageIndividual from "../models/api_ussage_individual.js";
 import DB from "../config/Database.js";
 import {
   sendManagerNotification,
-  sendAdminStatusNotification
+  sendAdminStatusNotification,
+  sendNextApproverNotification
 } from "../utils/EmailService.js";
 
 // >>> CREATE NEW SISWA
@@ -1001,7 +1002,17 @@ export const list_invoice = async (req, res) => {
 
     // 1. Status Filter
     if (status) {
-      where.status = status;
+      if (status === "technician_pending") {
+        where.status = "on_review";
+        where.opsi = "technician";
+      } else if (status === "sales_pending") {
+        where.status = "on_review";
+        where.opsi = "sales";
+      } else if (status === "completed") {
+        where.status = { [Op.or]: ["completed", "closed"] };
+      } else {
+        where.status = status;
+      }
     }
 
     // 2. Search Filter (Partial match on nama_invoice)
@@ -1009,8 +1020,9 @@ export const list_invoice = async (req, res) => {
       where.nama_invoice = { [Op.iLike]: `%${search}%` };
     }
 
-    // 3. User Filter (If not admin/manager, show only their own)
-    if (req.alldata && req.alldata.role !== "admin" && req.alldata.role !== "manager") {
+    // 3. User Filter (If not admin/manager/supervisor/finance/kasir, show only their own)
+    const allApproverRoles = ["admin", "manager", "supervisor", "finance", "kasir"];
+    if (req.alldata && !allApproverRoles.includes(req.alldata.role)) {
       where.id_user = req.alldata.userId;
     }
 
@@ -1057,19 +1069,36 @@ export const invoiceDetail = async (req, res) => {
 
 export const getInvoiceSummary = async (req, res) => {
   try {
-    const on_review = await invoice.count({ where: { status: "on_review" } });
-    const on_forward = await invoice.count({ where: { status: "on_forward" } });
+    const total = await invoice.count();
     const rejected = await invoice.count({ where: { status: "rejected" } });
-    const accepted = await invoice.count({ where: { status: "accepted" } });
-    const closed = await invoice.count({ where: { status: "closed" } });
+    const completed = await invoice.count({ where: { status: { [Op.or]: ["completed", "closed"] } } });
+
+    // Technician Pending: opsi technician AND not completed/rejected/closed
+    const technician_pending = await invoice.count({
+      where: {
+        opsi: "technician",
+        status: "on_review"
+      }
+    });
+
+    // Sales Pending: opsi sales AND not completed/rejected/closed
+    const sales_pending = await invoice.count({
+      where: {
+        opsi: "sales",
+        status: "on_review"
+      }
+    });
 
     res.status(200).json({
-      on_review,
-      on_forward,
+      total,
       rejected,
-      accepted,
-      closed,
-      total: on_review + on_forward + rejected + accepted + closed,
+      completed,
+      technician_pending,
+      sales_pending,
+      // fallback for old UI compatibility
+      on_review: technician_pending + sales_pending,
+      on_forward: 0,
+      accepted: completed
     });
   } catch (error) {
     console.error("Error getInvoiceSummary:", error);
@@ -1119,7 +1148,11 @@ export const updateInvoiceTransactions = async (req, res) => {
 };
 
 export const updateInvoiceStatus = async (req, res) => {
-  const { id, status } = req.body;
+  const { id, action } = req.body; // Action can be 'approve' or 'close'
+  const userRole = req.alldata.role;
+  const userDept = req.alldata.department;
+  const userName = req.alldata.name;
+
   try {
     const existingInvoice = await invoice.findByPk(id, {
       include: [Users]
@@ -1128,53 +1161,131 @@ export const updateInvoiceStatus = async (req, res) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    const currentStatus = existingInvoice.status;
+    const { opsi, acc_supervisor, acc_finance, acc_direksi, acc_kasir, dept: invoiceDept } = existingInvoice;
 
-    // 🔥 SECURITY FIX: Status validation
-    const allowedStatuses = ["on_review", "on_forward", "rejected", "accepted", "closed"];
-    if (!allowedStatuses.includes(status)) {
-      return res.status(422).json({ message: "Invalid status value" });
-    }
-
-    await existingInvoice.update({ status });
-
-    // --- SEND EMAIL NOTIFICATIONS ---
-    
-    // 1. Admin verifies and forwards to Manager
-    if (currentStatus === "on_review" && status === "on_forward") {
-      const envManagerEmail = process.env.EMAIL_TO_MANAGER;
-      
-      if (envManagerEmail) {
-        sendManagerNotification(
-          envManagerEmail,
-          existingInvoice.user?.name || "User",
-          existingInvoice.id,
-          existingInvoice.total_harga
-        );
-      } else {
-        // Fallback: Find a manager in DB if env is not set
-        const manager = await Users.findOne({ where: { role: "manager" } });
-        if (manager) {
-          sendManagerNotification(
-            manager.email,
-            existingInvoice.user?.name || "User",
-            existingInvoice.id,
-            existingInvoice.total_harga
-          );
+    // --- TECHNICIAN FLOW ---
+    if (opsi === "technician") {
+      if (action === "approve") {
+        // Step 1: Supervisor (matching dept)
+        if (!acc_supervisor && !acc_finance && !acc_direksi) {
+          if (userRole !== "supervisor" || userDept !== invoiceDept) {
+            return res.status(403).json({ message: "Only Supervisor from this department can approve first." });
+          }
+          await existingInvoice.update({ acc_supervisor: userName });
+        }
+        // Step 2: Finance (after supervisor)
+        else if (acc_supervisor && !acc_finance && !acc_direksi) {
+          if (userRole !== "finance") {
+            return res.status(403).json({ message: "Only Finance can approve after Supervisor." });
+          }
+          await existingInvoice.update({ acc_finance: userName });
+        }
+        // Step 3: Manager (after finance)
+        else if (acc_supervisor && acc_finance && !acc_direksi) {
+          if (userRole !== "manager") {
+            return res.status(403).json({ message: "Only Manager can approve after Finance." });
+          }
+          await existingInvoice.update({ acc_direksi: userName, status: "completed" });
+        }
+        else {
+          return res.status(400).json({ message: "Approval complete or out of sequence." });
+        }
+      } else if (action === "close") {
+        // Step 4: Finance (Close after Manager)
+        if (acc_direksi && existingInvoice.status === "completed") {
+          if (userRole !== "finance") {
+            return res.status(403).json({ message: "Only Finance can close the invoice." });
+          }
+          await existingInvoice.update({ status: "closed" });
+        } else {
+          return res.status(400).json({ message: "Cannot close invoice yet. Manager approval required." });
         }
       }
     }
 
-    // 2. Manager approves or rejects
-    if (currentStatus === "on_forward" && (status === "accepted" || status === "rejected")) {
-      sendAdminStatusNotification(
-        existingInvoice.user?.name || "User",
-        existingInvoice.id,
-        status
-      );
+    // --- SALES FLOW ---
+    else if (opsi === "sales") {
+      if (action === "approve") {
+        // Step 1: Manager
+        if (!acc_direksi && !acc_kasir && !acc_finance) {
+          if (userRole !== "manager") {
+            return res.status(403).json({ message: "Only Manager can approve first." });
+          }
+          await existingInvoice.update({ acc_direksi: userName });
+        }
+        // Step 2: Kasir (after manager)
+        else if (acc_direksi && !acc_kasir && !acc_finance) {
+          if (userRole !== "kasir") {
+            return res.status(403).json({ message: "Only Kasir can approve after Manager." });
+          }
+          await existingInvoice.update({ acc_kasir: userName });
+        }
+        // Step 3: Finance (after kasir)
+        else if (acc_direksi && acc_kasir && !acc_finance) {
+          if (userRole !== "finance") {
+            return res.status(403).json({ message: "Only Finance can approve after Kasir." });
+          }
+          await existingInvoice.update({ acc_finance: userName, status: "completed" });
+        }
+        else {
+          return res.status(400).json({ message: "Approval complete or out of sequence." });
+        }
+      } else if (action === "close") {
+        // Step 4: Finance (Close after Finance approval)
+        if (acc_finance && existingInvoice.status === "completed") {
+          if (userRole !== "finance") {
+            return res.status(403).json({ message: "Only Finance can close the invoice." });
+          }
+          await existingInvoice.update({ status: "closed" });
+        } else {
+          return res.status(400).json({ message: "Cannot close invoice yet. Finance approval required." });
+        }
+      }
     }
 
-    res.status(200).json({ message: "Invoice status updated successfully" });
+    // Handle generic Rejection if needed (optional based on user request, but good practice)
+    else if (action === "reject") {
+        await existingInvoice.update({ status: "rejected" });
+    }
+
+    else {
+      return res.status(422).json({ message: "Invalid 'opsi' or 'action' value." });
+    }
+
+    // --- SEND EMAIL NOTIFICATIONS ---
+    const { user: uploader, total_harga } = existingInvoice;
+    const uploaderName = uploader?.name || "User";
+
+    if (action === "approve") {
+      if (opsi === "technician") {
+        if (!acc_finance) {
+          // After Supervisor approval, notify Finance
+          sendNextApproverNotification("finance", null, uploaderName, id, total_harga);
+        } else if (!acc_direksi) {
+          // After Finance approval, notify Manager
+          sendNextApproverNotification("manager", null, uploaderName, id, total_harga);
+        } else if (existingInvoice.status === "completed") {
+          // After Manager approval, notify Finance to close
+          sendNextApproverNotification("finance", null, uploaderName, id, total_harga);
+        }
+      } else if (opsi === "sales") {
+        if (!acc_kasir) {
+          // After Manager approval, notify Kasir
+          sendNextApproverNotification("kasir", null, uploaderName, id, total_harga);
+        } else if (!acc_finance) {
+          // After Kasir approval, notify Finance
+          sendNextApproverNotification("finance", null, uploaderName, id, total_harga);
+        } else if (existingInvoice.status === "completed") {
+          // After Finance approval, notify Finance to close
+          sendNextApproverNotification("finance", null, uploaderName, id, total_harga);
+        }
+      }
+    } else if (action === "reject") {
+        // Notify uploader or admin on rejection if needed
+        // For now, let's keep it simple as the user didn't specify rejection notifications
+    }
+
+    res.status(200).json({ message: `Invoice action '${action}' successful.` });
   } catch (error) {
     console.error("Error updating invoice status:", error);
     res.status(500).json({ message: "Failed to update invoice status", error: error.message });

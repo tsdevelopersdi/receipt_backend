@@ -105,6 +105,9 @@ export const uploadFile = async (req, res) => {
           tanggal_upload: new Date(),
           total_harga: parseInt(req.body.grand_total, 10) || 0,
           status: "on_review",
+          opsi: req.body.opsi || null,
+          keterangan: req.body.keterangan || null,
+          dept: req.body.dept || null,
         }, { transaction: t });
         console.log("[✅] Invoice created, id:", createInvoice.id);
 
@@ -135,6 +138,18 @@ export const uploadFile = async (req, res) => {
       console.log("[✅] Database transaction committed successfully");
 
       // 6. Send Email Notification (Async, don't wait for response to send 200)
+      const firstApproverRole = createInvoice.opsi === "technician" ? "supervisor" : "manager";
+      const { sendNextApproverNotification } = await import("../utils/EmailService.js");
+      
+      sendNextApproverNotification(
+          firstApproverRole,
+          createInvoice.dept, // used if it's supervisor
+          FindUser.name,
+          createInvoice.id,
+          createInvoice.total_harga
+      );
+
+      // Also notify Admin as a record
       sendUploadNotification(
         FindUser.email,
         FindUser.name,

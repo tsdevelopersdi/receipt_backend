@@ -25,9 +25,10 @@ export const refreshToken = async (req, res) => {
         const email = user[0].email;
         const role = user[0].role;
         const status = user[0].status;
+        const department = user[0].department;
 
         const newAccessToken = jwt.sign(
-          { userId, name, email, role, status },
+          { userId, name, email, role, status, department },
           process.env.ACCESS_TOKEN_SECRET,
           { expiresIn: "30s" }
         );
@@ -36,9 +37,8 @@ export const refreshToken = async (req, res) => {
         res.cookie("accessToken", newAccessToken, {
           httpOnly: true,
           maxAge: 600 * 1000, // 10 minutes, matches AuthController
-          secure: true,
+          secure: false, // Changed to false for HTTP support
           sameSite: "lax",
-          domain: "estimaclaim.solusidaya.id",
           path: "/",
         });
 
