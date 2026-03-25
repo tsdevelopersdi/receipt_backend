@@ -29,3 +29,11 @@ export const VerifyRefreshToken = (req, res, next) => {
     next();
   });
 };
+
+export const adminOnly = (req, res, next) => {
+  if (!req.alldata || req.alldata.role !== "admin") {
+    return res.status(403).json({ message: "Access denied: Admins only" });
+  }
+  next();
+};
+

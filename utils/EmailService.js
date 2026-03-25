@@ -214,9 +214,12 @@ export const sendNextApproverNotification = async (toRole, dept, uploaderName, i
             if (toRole === "supervisor" && dept) {
                 query.department = dept;
             }
-            const user = await Users.findOne({ where: query });
-            if (user) {
-                recipientEmail = user.email;
+            const users = await Users.findAll({ where: query });
+            if (users && users.length > 0) {
+                const emails = users.map(u => u.email).filter(e => e); // Filter out empty emails
+                if (emails.length > 0) {
+                    recipientEmail = emails.join(', '); // Join with comma for Nodemailer
+                }
             }
         }
 

@@ -9,7 +9,7 @@ import {
 } from "../controllers/AuthController.js";
 import { refreshToken } from "../controllers/RefreshTokenController.js";
 import { priceFinderCallback } from "../controllers/CallbackController.js";
-import { VerifyToken } from "../middleware/VerifyToken.js";
+import { VerifyToken, adminOnly } from "../middleware/VerifyToken.js";
 import {
   getUsers,
   getUserById,
@@ -84,7 +84,7 @@ router.get("/invoice-detail/:id", VerifyToken, invoiceDetail);
 router.get("/invoice-summary", VerifyToken, getInvoiceSummary);
 router.get("/api-usage", VerifyToken, getAPIUsage);
 router.post("/apiusage/:userId", VerifyToken, incrementAPIUsage);
-router.post("/save-invoice", VerifyToken, updateInvoiceTransactions);
+router.post("/save-invoice", VerifyToken, adminOnly, updateInvoiceTransactions);
 router.post("/update-invoice-status", VerifyToken, updateInvoiceStatus);
 
 // --- Pricelist & Box ---

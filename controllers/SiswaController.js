@@ -1256,26 +1256,30 @@ export const updateInvoiceStatus = async (req, res) => {
     const { user: uploader, total_harga } = existingInvoice;
     const uploaderName = uploader?.name || "User";
 
+    // Reload the invoice to get the fresh status after the updates above
+    await existingInvoice.reload();
+    const freshInvoice = existingInvoice;
+
     if (action === "approve") {
       if (opsi === "technician") {
-        if (!acc_finance) {
+        if (!freshInvoice.acc_finance) {
           // After Supervisor approval, notify Finance
           sendNextApproverNotification("finance", null, uploaderName, id, total_harga);
-        } else if (!acc_direksi) {
+        } else if (!freshInvoice.acc_direksi) {
           // After Finance approval, notify Manager
           sendNextApproverNotification("manager", null, uploaderName, id, total_harga);
-        } else if (existingInvoice.status === "completed") {
+        } else if (freshInvoice.status === "completed") {
           // After Manager approval, notify Finance to close
           sendNextApproverNotification("finance", null, uploaderName, id, total_harga);
         }
       } else if (opsi === "sales") {
-        if (!acc_kasir) {
+        if (!freshInvoice.acc_kasir) {
           // After Manager approval, notify Kasir
           sendNextApproverNotification("kasir", null, uploaderName, id, total_harga);
-        } else if (!acc_finance) {
+        } else if (!freshInvoice.acc_finance) {
           // After Kasir approval, notify Finance
           sendNextApproverNotification("finance", null, uploaderName, id, total_harga);
-        } else if (existingInvoice.status === "completed") {
+        } else if (freshInvoice.status === "completed") {
           // After Finance approval, notify Finance to close
           sendNextApproverNotification("finance", null, uploaderName, id, total_harga);
         }
