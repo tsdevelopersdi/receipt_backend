@@ -37,6 +37,7 @@ import {
   updateInvoiceStatus,
   getAPIUsage,
   incrementAPIUsage,
+  getInvoiceSummaryAdvanced,
 } from "../controllers/SiswaController.js";
 import { uploadFile } from "../controllers/UploadController.js";
 
@@ -61,27 +62,28 @@ router.get("/api/test-n8n", (req, res) => res.json({ message: "Backend is reacha
 // ============================================================
 
 // --- Attendance ---
-router.get("/recent", VerifyToken, getSpecificAttendance);
-router.post("/recent", VerifyToken, getSpecificAttendance);
-router.post("/recent/:id", VerifyToken, getSpecificAttendanceByEmail);
+// router.get("/recent", VerifyToken, getSpecificAttendance);
+// router.post("/recent", VerifyToken, getSpecificAttendance);
+// router.post("/recent/:id", VerifyToken, getSpecificAttendanceByEmail);
 
-// --- Project Management ---
-router.get("/projects", VerifyToken, list_project);
-router.get("/projects/:id", VerifyToken, projectnya);
-router.post("/projects", VerifyToken, save_project);
-router.put("/projects/:id", VerifyToken, UpdateProject);
+// // --- Project Management ---
+// router.get("/projects", VerifyToken, list_project);
+// router.get("/projects/:id", VerifyToken, projectnya);
+// router.post("/projects", VerifyToken, save_project);
+// router.put("/projects/:id", VerifyToken, UpdateProject);
 
-// --- SLD Draft Management ---
-router.get("/list-draft", VerifyToken, list_draft);
-router.get("/list-draft/:id", VerifyToken, getDraftItems);
-router.post("/save-sld", VerifyToken, saveDraft);
-router.post("/update-sld", VerifyToken, updateDraft);
+// // --- SLD Draft Management ---
+// router.get("/list-draft", VerifyToken, list_draft);
+// router.get("/list-draft/:id", VerifyToken, getDraftItems);
+// router.post("/save-sld", VerifyToken, saveDraft);
+// router.post("/update-sld", VerifyToken, updateDraft);
 
 // --- Invoice Management ---
 router.post("/upload", uploadFile);
 router.get("/listinvoice", VerifyToken, list_invoice);
 router.get("/invoice-detail/:id", VerifyToken, invoiceDetail);
 router.get("/invoice-summary", VerifyToken, getInvoiceSummary);
+router.get("/invoice-summary-advanced", VerifyToken, getInvoiceSummaryAdvanced);
 router.get("/api-usage", VerifyToken, getAPIUsage);
 router.post("/apiusage/:userId", VerifyToken, incrementAPIUsage);
 router.post("/save-invoice", VerifyToken, adminOnly, updateInvoiceTransactions);

@@ -37,9 +37,10 @@ export const refreshToken = async (req, res) => {
         res.cookie("accessToken", newAccessToken, {
           httpOnly: true,
           maxAge: 600 * 1000, // 10 minutes, matches AuthController
-          secure: true, // Changed to false for HTTP support
+          // secure: true, // Changed to false for HTTP support
+          secure: false, // Changed to false for HTTP support
           sameSite: "lax",
-          domain: "estimaclaim.solusidaya.id",
+          // domain: "estimaclaim.solusidaya.id",
           path: "/",
         });
 

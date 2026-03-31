@@ -111,9 +111,7 @@ app.use(router);
 try {
   await DB.authenticate();
   console.log("Database Connected !");
-  // await Presensi.sync();
-  await Users.sync({ alter: true });
-  // await Siswa.sync();
+  await Users.sync();
   await ProjectModel.sync();
   await sld_draft_name.sync();
   await sld_draft.sync();
@@ -127,9 +125,6 @@ try {
 } catch (error) {
   console.log(error);
 }
-
-// const PHOTO_DIR = path.resolve('Y:/TS-SDI/photos');
-
 
 const PHOTO_DIR = path.resolve(process.env.ATTENDANCE_UPLOAD_DIR);
 console.log(`[DEBUG] Resolved PHOTO_DIR: ${PHOTO_DIR}`);
@@ -147,9 +142,6 @@ if (fs.existsSync(PHOTO_DIR)) {
 }
 
 app.use('/photos', express.static(PHOTO_DIR));
-// app.use('/public', express.static('public'));
-// app.use(express.static("public"));
-
 
 // --- START THE SERVER
 httpServer.listen(15753, () => {

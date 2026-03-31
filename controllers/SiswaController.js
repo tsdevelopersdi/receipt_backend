@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import path from "path";
 import fs from "fs";
 import { Op } from "sequelize";
+import DB from "../config/Database.js";
 import Siswa from "../models/SiswaModel.js";
 import Users from "../models/UserModel.js";
 import Presensi from "../models/PresensiModel.js";
@@ -18,7 +19,6 @@ import invoice from "../models/invoiceModel.js";
 import transaction from "../models/transactionModel.js";
 import APIUsageGroup from "../models/api_ussage_group.js";
 import APIUsageIndividual from "../models/api_ussage_individual.js";
-import DB from "../config/Database.js";
 import {
   sendManagerNotification,
   sendAdminStatusNotification,
@@ -1200,6 +1200,12 @@ export const updateInvoiceStatus = async (req, res) => {
         } else {
           return res.status(400).json({ message: "Cannot close invoice yet. Manager approval required." });
         }
+      } else if (action === "reject") {
+        // Anyone in approval chain can reject at any point UNLESS already completed/closed
+        if (existingInvoice.status === "completed" || existingInvoice.status === "closed") {
+          return res.status(400).json({ message: "Cannot reject a completed or closed invoice." });
+        }
+        await existingInvoice.update({ status: "rejected" });
       }
     }
 
@@ -1240,14 +1246,23 @@ export const updateInvoiceStatus = async (req, res) => {
         } else {
           return res.status(400).json({ message: "Cannot close invoice yet. Finance approval required." });
         }
+      } else if (action === "reject") {
+        // Anyone in approval chain can reject at any point UNLESS already completed/closed
+        if (existingInvoice.status === "completed" || existingInvoice.status === "closed") {
+          return res.status(400).json({ message: "Cannot reject a completed or closed invoice." });
+        }
+        await existingInvoice.update({ status: "rejected" });
       }
     }
 
-    // Handle generic Rejection if needed (optional based on user request, but good practice)
+    // Handle case where opsi is neither technician nor sales (should not happen in normal flow)
     else if (action === "reject") {
-        await existingInvoice.update({ status: "rejected" });
+      // For invoices without a valid opsi, allow rejection
+      if (existingInvoice.status === "completed" || existingInvoice.status === "closed") {
+        return res.status(400).json({ message: "Cannot reject a completed or closed invoice." });
+      }
+      await existingInvoice.update({ status: "rejected" });
     }
-
     else {
       return res.status(422).json({ message: "Invalid 'opsi' or 'action' value." });
     }
@@ -1335,6 +1350,141 @@ export const getAPIUsage = async (req, res) => {
   } catch (error) {
     console.error("Error getAPIUsage:", error);
     res.status(500).json({ message: "Failed to get API usage", error: error.message });
+  }
+};
+
+// >>> INVOICE SUMMARY (ADVANCED — date range, flow, status, dept)
+export const getInvoiceSummaryAdvanced = async (req, res) => {
+  try {
+    const {
+      dateFrom, dateTo,
+      flow, status, dept,
+      search,
+      page: pageStr, limit: limitStr,
+      all // if truthy, return only KPI counts with no pagination
+    } = req.query;
+
+    const page   = parseInt(pageStr, 10) || 1;
+    const limit  = all ? 99999 : (parseInt(limitStr, 10) || 10);
+    const offset = (page - 1) * limit;
+
+    // ── Build WHERE clause ──────────────────────────────────────────
+    const where = {};
+
+    // Role filter: regular users only see their own
+    const approverRoles = ["admin", "manager", "supervisor", "finance", "kasir"];
+    if (req.alldata && !approverRoles.includes(req.alldata.role)) {
+      where.id_user = req.alldata.userId;
+    }
+
+    // Date range on tanggal_upload
+    if (dateFrom && dateTo) {
+      where.tanggal_upload = { [Op.between]: [new Date(dateFrom + "T00:00:00"), new Date(dateTo + "T23:59:59")] };
+    } else if (dateFrom) {
+      where.tanggal_upload = { [Op.gte]: new Date(dateFrom + "T00:00:00") };
+    } else if (dateTo) {
+      where.tanggal_upload = { [Op.lte]: new Date(dateTo + "T23:59:59") };
+    }
+
+    // Flow filter (opsi)
+    if (flow) where.opsi = flow;
+
+    // Status filter
+    if (status) {
+      if (status === "completed") {
+        where.status = { [Op.or]: ["completed", "closed"] };
+      } else {
+        where.status = status;
+      }
+    }
+
+    // Dept filter
+    if (dept) where.dept = { [Op.iLike]: `%${dept}%` };
+
+    // Search on keterangan
+    if (search) {
+      where.keterangan = { [Op.iLike]: `%${search}%` };
+    }
+
+    // ── KPI counts (always computed from the same WHERE) ────────────
+    const [total, pending, completed, closed, rejected, totalAmountRaw] = await Promise.all([
+      invoice.count({ where }),
+      invoice.count({ where: { ...where, status: "on_review" } }),
+      invoice.count({ where: { ...where, status: "completed" } }),
+      invoice.count({ where: { ...where, status: "closed" } }),
+      invoice.count({ where: { ...where, status: "rejected" } }),
+      invoice.sum("total_harga", { where }),
+    ]);
+
+    // ── Trend Analysis (Group by Day) ───────────────────────────────
+    // Grouping by Date using Sequelize literal for SQLite/Postgres/MySQL compatibility
+    // Note: Since this is likely Postgres/MySQL based on iLike usage above
+    const trends = await invoice.findAll({
+      where,
+      attributes: [
+        [DB.fn('DATE', DB.col('tanggal_upload')), 'day'],
+        [DB.fn('SUM', DB.col('total_harga')), 'amount'],
+        [DB.fn('COUNT', DB.col('id')), 'count'],
+      ],
+      group: [DB.fn('DATE', DB.col('tanggal_upload'))],
+      order: [[DB.fn('DATE', DB.col('tanggal_upload')), 'ASC']],
+      raw: true
+    });
+
+    // ── Monthly Trend Analysis ─────────────────────────────────────
+    const monthlyTrends = await invoice.findAll({
+      where,
+      attributes: [
+        [DB.fn('TO_CHAR', DB.col('tanggal_upload'), 'YYYY-MM'), 'month'],
+        [DB.fn('SUM', DB.col('total_harga')), 'amount'],
+        [DB.fn('COUNT', DB.col('id')), 'count'],
+      ],
+      group: [DB.fn('TO_CHAR', DB.col('tanggal_upload'), 'YYYY-MM')],
+      order: [[DB.fn('TO_CHAR', DB.col('tanggal_upload'), 'YYYY-MM'), 'ASC']],
+      raw: true
+    });
+
+    // ── Status Distribution ─────────────────────────────────────────
+    const statusDistribution = await invoice.findAll({
+      where,
+      attributes: [
+        'status',
+        [DB.fn('COUNT', DB.col('id')), 'count'],
+      ],
+      group: ['status'],
+      raw: true
+    });
+
+    // ── Paginated rows ──────────────────────────────────────────────
+    const { count, rows } = await invoice.findAndCountAll({
+      where,
+      include: [{ model: Users, attributes: ["id", "name", "email", "role"] }],
+      limit,
+      offset,
+      order: [["id", "DESC"]],
+    });
+
+    res.status(200).json({
+      // KPI
+      total,
+      pending,
+      completed,
+      closed,
+      rejected,
+      totalAmount: totalAmountRaw || 0,
+      // Analysis
+      trends: trends.map(t => ({ day: t.day, amount: parseInt(t.amount, 10), count: parseInt(t.count, 10) })),
+      monthlyTrends: monthlyTrends.map(t => ({ month: t.month, amount: parseInt(t.amount, 10), count: parseInt(t.count, 10) })),
+      statusDistribution: statusDistribution.map(s => ({ status: s.status, count: parseInt(s.count, 10) })),
+      // Table
+      totalItems: count,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+      invoices: rows,
+    });
+  } catch (error) {
+    console.error("Error getInvoiceSummaryAdvanced:", error);
+    res.status(500).json({ message: "Failed to get invoice summary", error: error.message });
   }
 };
 

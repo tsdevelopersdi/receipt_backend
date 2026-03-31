@@ -73,20 +73,20 @@ export const LoginUser = async (req, res) => {
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         maxAge: 600 * 1000,
-        secure: true, // Changed to false for HTTP support
-        // secure: false, // Changed to false for HTTP support
+        // secure: true, // Changed to false for HTTP support
+        secure: false, // Changed to false for HTTP support
         sameSite: "lax",
-        domain: "estimaclaim.solusidaya.id",
+        // domain: "estimaclaim.solusidaya.id",
         path: "/"
       });
 
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         maxAge: 7 * 24 * 60 * 60 * 1000,
-        secure: true, // Changed to false for HTTP support
-        // secure: false, // Changed to false for HTTP support
+        // secure: true, // Changed to false for HTTP support
+        secure: false, // Changed to false for HTTP support
         sameSite: "lax",
-        domain: "estimaclaim.solusidaya.id",
+        // domain: "estimaclaim.solusidaya.id",
         path: "/"
       });
 
@@ -153,38 +153,3 @@ export const DeleteUser = async (req, res) => {
   });
   return res.status(200).json("success delete user!");
 };
-
-// // >>> LOGOUT USER
-// export const LogoutUser = async (req, res) => {
-//   const refreshToken = req.body.refreshToken;
-//   if (!refreshToken) return res.sendStatus(204);
-//   const user = await Users.findAll({
-//     where: {
-//       refresh_token: refreshToken,
-//     },
-//   });
-//   if (!user[0]) return res.sendStatus(403);
-//   const userId = user[0].id;
-//   await Users.update(
-//     {
-//       refresh_token: null,
-//     },
-//     {
-//       where: {
-//         id: userId,
-//       },
-//     }
-//   );
-//   res.clearCookie("refreshToken");
-//   return res.status(200).json("success logout!");
-// };
-
-// // >>> TEST API FOR ATTENDANCE
-// export const attendance = async (req, res) => {
-//   try {
-//     console.log(req.body)
-//     return res.status(200).json("register success !");
-//   } catch (error) {
-//     console.log(error);
-//   }
-// };
