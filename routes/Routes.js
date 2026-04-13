@@ -66,11 +66,11 @@ router.get("/api/test-n8n", (req, res) => res.json({ message: "Backend is reacha
 // router.post("/recent", VerifyToken, getSpecificAttendance);
 // router.post("/recent/:id", VerifyToken, getSpecificAttendanceByEmail);
 
-// // --- Project Management ---
-// router.get("/projects", VerifyToken, list_project);
-// router.get("/projects/:id", VerifyToken, projectnya);
-// router.post("/projects", VerifyToken, save_project);
-// router.put("/projects/:id", VerifyToken, UpdateProject);
+// --- Project Management ---
+router.get("/projects", VerifyToken, list_project);
+router.get("/projects/:id", VerifyToken, projectnya);
+router.post("/projects", VerifyToken, save_project);
+router.put("/projects/:id", VerifyToken, UpdateProject);
 
 // // --- SLD Draft Management ---
 // router.get("/list-draft", VerifyToken, list_draft);

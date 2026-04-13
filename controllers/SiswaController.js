@@ -1130,6 +1130,7 @@ export const updateInvoiceTransactions = async (req, res) => {
           invoice_id: id,
           tanggal: t.tanggal || null,
           merchant: t.merchant || "",
+          project: t.project || null,
           jumlah: jumlah,
           // Optional: id_user: req.alldata?.id
         });
@@ -1359,6 +1360,7 @@ export const getInvoiceSummaryAdvanced = async (req, res) => {
     const {
       dateFrom, dateTo,
       flow, status, dept,
+      project,
       search,
       page: pageStr, limit: limitStr,
       all // if truthy, return only KPI counts with no pagination
@@ -1400,6 +1402,18 @@ export const getInvoiceSummaryAdvanced = async (req, res) => {
 
     // Dept filter
     if (dept) where.dept = { [Op.iLike]: `%${dept}%` };
+
+    // Project filter (based on transactions.project)
+    if (project) {
+      const matchedTransactions = await transaction.findAll({
+        attributes: ["invoice_id"],
+        where: { project },
+        group: ["invoice_id"],
+        raw: true
+      });
+      const matchedInvoiceIds = matchedTransactions.map((t) => t.invoice_id).filter(Boolean);
+      where.id = matchedInvoiceIds.length > 0 ? { [Op.in]: matchedInvoiceIds } : -1;
+    }
 
     // Search on keterangan
     if (search) {

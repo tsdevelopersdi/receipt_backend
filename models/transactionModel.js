@@ -26,6 +26,10 @@ const transaction = DB.define(
       type: DataTypes.STRING,
       defaultValue: null,
     },
+    project: {
+      type: DataTypes.STRING,
+      defaultValue: null,
+    },
     jumlah: {
       type: DataTypes.INTEGER,
       defaultValue: null,

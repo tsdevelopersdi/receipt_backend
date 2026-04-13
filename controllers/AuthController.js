@@ -73,20 +73,20 @@ export const LoginUser = async (req, res) => {
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         maxAge: 600 * 1000,
-        // secure: true, // Changed to false for HTTP support
-        secure: false, // Changed to false for HTTP support
+        secure: true, // Changed to false for HTTP support
+        // secure: false, // Changed to false for HTTP support
         sameSite: "lax",
-        // domain: "estimaclaim.solusidaya.id",
+        domain: "estimaclaim.solusidaya.id",
         path: "/"
       });
 
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         maxAge: 7 * 24 * 60 * 60 * 1000,
-        // secure: true, // Changed to false for HTTP support
-        secure: false, // Changed to false for HTTP support
+        secure: true, // Changed to false for HTTP support
+        // secure: false, // Changed to false for HTTP support
         sameSite: "lax",
-        // domain: "estimaclaim.solusidaya.id",
+        domain: "estimaclaim.solusidaya.id",
         path: "/"
       });
 

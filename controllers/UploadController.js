@@ -128,6 +128,7 @@ export const uploadFile = async (req, res) => {
           tanggal: parseDate(tr.tanggal),
           merchant: tr.merchant || null,
           kategori: tr.kategori || null,
+          project: tr.project || null,
           jumlah: parseInt(tr.jumlah, 10) || 0,
         }));
 
